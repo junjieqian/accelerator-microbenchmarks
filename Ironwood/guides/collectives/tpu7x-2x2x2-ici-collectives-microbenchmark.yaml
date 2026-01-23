@@ -1,0 +1,90 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: headless-svc
+spec:
+  clusterIP: None
+  selector:
+    # Use a constant app label instead of the volatile job-name
+    training-session: tpu-microbenchmark-collectives
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: tpu7x-2x2x2-ici-collectives-microbenchmark-
+spec:
+  completionMode: Indexed
+  parallelism: 2
+  completions: 2
+  backoffLimit: 0
+  template:
+    spec:
+      subdomain: headless-svc
+      restartPolicy: Never
+      nodeSelector:
+        cloud.google.com/gke-tpu-accelerator: tpu7x
+        cloud.google.com/gke-tpu-topology: 2x2x2
+      containers:
+      - name: jax-tpu
+        image: python:3.12
+        securityContext:
+          privileged: false
+        env:
+        - name: JAX_PLATFORMS
+          value: "tpu,cpu"
+        - name: TPU_VMODULE
+          value: "singleton_tpu_system_manager=10,tpu_version_flag=10,device_util=10,device_scanner=10,mesh_builder=10,master=10"
+        - name: XLA_IR_DEBUG
+          value: "1"
+        - name: XLA_HLO_DEBUG
+          value: "1"
+        command:
+        - bash
+        - -c
+        - |
+          set -ex
+          # install gcloud package
+          apt-get update && apt-get install -y apt-transport-https ca-certificates gnupg
+          curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
+          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+          apt-get update && apt-get install -y google-cloud-cli
+
+          git clone https://github.com/AI-Hypercomputer/accelerator-microbenchmarks.git
+          cd accelerator-microbenchmarks
+          pip install -r requirements.txt
+
+          # all gather 2x2x2 config
+          ## add new datatypes
+          echo "========================== all gather 2x2x2 =================="
+          sed -i '/dtype: "float32"/ { p; s/dtype: "float32"/dtype: "bfloat16"/; }' Ironwood/configs/collectives/all_gather_tpu7x_2x2x2.yaml
+          sed -i '/dtype: "float32"/ { p; s/dtype: "float32"/dtype: "float8"/; }' Ironwood/configs/collectives/all_gather_tpu7x_2x2x2.yaml
+          cat Ironwood/configs/collectives/all_gather_tpu7x_2x2x2.yaml
+
+          python Ironwood/src/run_benchmark.py --config="Ironwood/configs/collectives/all_gather_tpu7x_2x2x2.yaml"
+
+          gcloud storage cp ../microbenchmarks/all_gather_tpu7x_2x2x2/*.tsv gs://${BUCKET_NAME}/microbenchmarks/collectives/all_gather_tpu7x_2x2x2/
+
+          # all reduce 2x2x2 config
+          ## add new datatypes
+          echo "========================== all reduce 2x2x2 =================="
+          sed -i '/dtype: "float32"/ { p; s/dtype: "float32"/dtype: "bfloat16"/; }' Ironwood/configs/collectives/all_reduce_tpu7x_2x2x2.yaml
+          sed -i '/dtype: "float32"/ { p; s/dtype: "float32"/dtype: "float8"/; }' Ironwood/configs/collectives/all_reduce_tpu7x_2x2x2.yaml
+          cat Ironwood/configs/collectives/all_reduce_tpu7x_2x2x2.yaml
+
+          python Ironwood/src/run_benchmark.py --config="Ironwood/configs/collectives/all_reduce_tpu7x_2x2x2.yaml"
+          gcloud storage cp ../microbenchmarks/all_reduce_tpu7x_2x2x2/*.tsv gs://${BUCKET_NAME}/microbenchmarks/collectives/all_reduce_tpu7x_2x2x2/
+
+          # all to all 2x2x2 config
+          ## add new datatypes
+          echo "========================== all to all 2x2x2 =================="
+          sed -i '/dtype: "float32"/ { p; s/dtype: "float32"/dtype: "bfloat16"/; }' Ironwood/configs/collectives/all_to_all_tpu7x_2x2x2.yaml
+          sed -i '/dtype: "float32"/ { p; s/dtype: "float32"/dtype: "float8"/; }' Ironwood/configs/collectives/all_to_all_tpu7x_2x2x2.yaml
+          cat Ironwood/configs/collectives/all_to_all_tpu7x_2x2x2.yaml
+
+          python Ironwood/src/run_benchmark.py --config="Ironwood/configs/collectives/all_to_all_tpu7x_2x2x2.yaml"
+          gcloud storage cp ../microbenchmarks/all_to_all_tpu7x_2x2x2/*.tsv gs://${BUCKET_NAME}/microbenchmarks/collectives/all_to_all_tpu7x_2x2x2/
+        resources:
+          requests:
+            google.com/tpu: 4
+          limits:
+            google.com/tpu: 4

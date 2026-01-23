@@ -1,0 +1,1 @@
+export BUCKET_NAME="junjieqian-test" && envsubst '${BUCKET_NAME}' < tpu7x-2x2x1-helm-microbenchmark.yaml | kubectl create -f -

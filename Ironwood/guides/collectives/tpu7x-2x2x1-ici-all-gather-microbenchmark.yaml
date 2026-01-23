@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: tpu7x-2x2x1-ici-all-gather-microbenchmark
+  generateName: tpu7x-2x2x1-ici-collectives-microbenchmark-
 spec:
   restartPolicy: Never
   nodeSelector:
@@ -19,10 +19,46 @@ spec:
     - -c
     - |
       set -ex
+      # install gcloud package
+      apt-get update && apt-get install -y apt-transport-https ca-certificates gnupg
+      curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
+      echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+      apt-get update && apt-get install -y google-cloud-cli
+
       git clone https://github.com/AI-Hypercomputer/accelerator-microbenchmarks.git
       cd accelerator-microbenchmarks
       pip install -r requirements.txt
+
+      # all gather 2x2x1 config
+      ## add new datatypes
+      echo "========================== all gather 2x2x1 =================="
+      sed -i '/dtype: "float32"/ { p; s/dtype: "float32"/dtype: "bfloat16"/; }' Ironwood/configs/collectives/all_gather_tpu7x_2x2x1.yaml
+      sed -i '/dtype: "float32"/ { p; s/dtype: "float32"/dtype: "float8"/; }' Ironwood/configs/collectives/all_gather_tpu7x_2x2x1.yaml
+      cat Ironwood/configs/collectives/all_gather_tpu7x_2x2x1.yaml
+
       python Ironwood/src/run_benchmark.py --config="Ironwood/configs/collectives/all_gather_tpu7x_2x2x1.yaml"
+
+      gcloud storage cp ../microbenchmarks/all_gather_tpu7x_2x2x1/*.tsv gs://${BUCKET_NAME}/microbenchmarks/collectives/all_gather_tpu7x_2x2x1/
+
+      # all reduce 2x2x1 config
+      ## add new datatypes
+      echo "========================== all reduce 2x2x1 =================="
+      sed -i '/dtype: "float32"/ { p; s/dtype: "float32"/dtype: "bfloat16"/; }' Ironwood/configs/collectives/all_reduce_tpu7x_2x2x1.yaml
+      sed -i '/dtype: "float32"/ { p; s/dtype: "float32"/dtype: "float8"/; }' Ironwood/configs/collectives/all_reduce_tpu7x_2x2x1.yaml
+      cat Ironwood/configs/collectives/all_reduce_tpu7x_2x2x1.yaml
+
+      python Ironwood/src/run_benchmark.py --config="Ironwood/configs/collectives/all_reduce_tpu7x_2x2x1.yaml"
+      gcloud storage cp ../microbenchmarks/all_reduce_tpu7x_2x2x1/*.tsv gs://${BUCKET_NAME}/microbenchmarks/collectives/all_reduce_tpu7x_2x2x1/
+
+      # all to all 2x2x1 config
+      ## add new datatypes
+      echo "========================== all to all 2x2x1 =================="
+      sed -i '/dtype: "float32"/ { p; s/dtype: "float32"/dtype: "bfloat16"/; }' Ironwood/configs/collectives/all_to_all_tpu7x_2x2x1.yaml
+      sed -i '/dtype: "float32"/ { p; s/dtype: "float32"/dtype: "float8"/; }' Ironwood/configs/collectives/all_to_all_tpu7x_2x2x1.yaml
+      cat Ironwood/configs/collectives/all_to_all_tpu7x_2x2x1.yaml
+
+      python Ironwood/src/run_benchmark.py --config="Ironwood/configs/collectives/all_to_all_tpu7x_2x2x1.yaml"
+      gcloud storage cp ../microbenchmarks/all_to_all_tpu7x_2x2x1/*.tsv gs://${BUCKET_NAME}/microbenchmarks/collectives/all_to_all_tpu7x_2x2x1/
     resources:
       requests:
         google.com/tpu: 4
